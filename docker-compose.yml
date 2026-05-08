@@ -9,10 +9,14 @@ services:
     ports:
       - "3081:8080"
     environment:
-      - OLLAMA_HOST=http://100.95.235.61:11434
-      - AI_MODEL=gemma4:e2b
-      - VITE_ADMIN_USER=ADMIN
-      - VITE_ADMIN_PASS=E3r5c7
+      - OLLAMA_HOST=http://100.95.235.61:11434/v1
+      - AI_MODEL=qwen3.5:4b-nvfp4
+      # ⚠️  SECURITY: VITE_ prefix bakes these into the browser JS bundle.
+      # Anyone with DevTools can read them. Change before any external exposure.
+      # Long-term fix: move admin auth to a server-side backend (no VITE_ prefix).
+      - VITE_ADMIN_USER=${VITE_ADMIN_USER}
+      - VITE_ADMIN_PASS=${VITE_ADMIN_PASS}
+      # No API key needed — local Ollama inference via Mac Mini M4 Pro (Tailscale)
     restart: unless-stopped
     networks:
       - ai-bridge
