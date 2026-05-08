@@ -6,6 +6,13 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+
+# Build-time args — required so Vite bakes these into the bundle
+ARG VITE_ADMIN_USER
+ARG VITE_ADMIN_PASS
+ENV VITE_ADMIN_USER=$VITE_ADMIN_USER
+ENV VITE_ADMIN_PASS=$VITE_ADMIN_PASS
+
 RUN npm run build
 
 # --- 2. SERVE STAGE ---

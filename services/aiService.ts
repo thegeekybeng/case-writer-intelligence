@@ -16,8 +16,7 @@ const OLLAMA_MODEL = typeof process.env.AI_MODEL !== 'undefined'
   ? process.env.AI_MODEL
   : 'gemma4:e2b';
 
-console.log('[AI Service] OLLAMA_ENDPOINT:', OLLAMA_ENDPOINT);
-console.log('[AI Service] OLLAMA_MODEL:', OLLAMA_MODEL);
+
 
 // --- PERFORMANCE TUNING ---
 const TIMEOUT_MS = 30000; // Reduced from 60s to 30s
@@ -57,6 +56,15 @@ function setCacheResponse(key: string, response: string) {
     const firstKey = CACHE.keys().next().value;
     if (firstKey) CACHE.delete(firstKey);
   }
+}
+
+// Max input length to prevent runaway token usage
+const MAX_INPUT_CHARS = 5000;
+
+// NRIC pattern (Singapore) — mask before any AI dispatch
+const NRIC_PATTERN = /[STFGM]\d{7}[A-Z]/gi;
+function maskPII(text: string): string {
+  return text.replace(NRIC_PATTERN, '[NRIC REDACTED]');
 }
 
 function generateCacheKey(history: Message[], newMessage: string): string {
@@ -123,6 +131,7 @@ export const sendMessageToGemini = async (
 };
 
 export const streamCaseAnalysis = async (notes: string): Promise<any> => {
+  const sanitized = maskPII(notes.slice(0, MAX_INPUT_CHARS));
   const prompt = `
 Extract into JSON:
 - name, nric (masked), issue, agencies
@@ -130,7 +139,7 @@ Extract into JSON:
 - suggestedAgencies
 
 NOTES:
-${notes}
+${sanitized}
 `;
 
   try {
@@ -152,7 +161,9 @@ ${notes}
 };
 
 export const analyzeAndCategorizeCase = async (conversation: Message[]): Promise<CategorizationResult> => {
-  const conversationText = conversation.map(msg => `[${msg.role.toUpperCase()}]: ${msg.content}`).join('\n');
+  const conversationText = conversation
+    .map(msg => `[${msg.role.toUpperCase()}]: ${maskPII(msg.content.slice(0, MAX_INPUT_CHARS))}`)
+    .join('\n');
 
   const analysisPrompt = `
 Categorize this case:
