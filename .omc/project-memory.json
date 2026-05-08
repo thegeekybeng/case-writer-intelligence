@@ -1,0 +1,143 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1774879853989,
+  "projectRoot": "/volume2/docker/cwi",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.0.0",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc && vite build",
+      "preview": "vite preview"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "components",
+      "public"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "components": {
+      "path": "components",
+      "purpose": "UI components",
+      "fileCount": 4,
+      "lastAccessed": 1774879853968,
+      "keyFiles": [
+        "CaseDetail.tsx",
+        "OnboardingGuide.tsx",
+        "WriterDashboard.tsx",
+        "WriterProfileSetup.tsx"
+      ]
+    },
+    "constants": {
+      "path": "constants",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1774879853970,
+      "keyFiles": [
+        "agencyTemplates.ts",
+        "causalityDomains.ts"
+      ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 5,
+      "lastAccessed": 1774879853980,
+      "keyFiles": [
+        "index.html",
+        "step1.png",
+        "step2.png",
+        "step3.png",
+        "step4.png"
+      ]
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 4,
+      "lastAccessed": 1774879853984,
+      "keyFiles": [
+        "step1.png",
+        "step2.png",
+        "step3.png",
+        "step4.png"
+      ]
+    },
+    "services": {
+      "path": "services",
+      "purpose": "Business logic services",
+      "fileCount": 4,
+      "lastAccessed": 1774879853986,
+      "keyFiles": [
+        "aiService.ts",
+        "causalityEngine.ts",
+        "letterGenerator.ts",
+        "profileService.ts"
+      ]
+    },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1774879853987,
+      "keyFiles": [
+        "index-u4ecbtlp.js"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}
