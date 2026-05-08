@@ -1,0 +1,22 @@
+# --- 1. SERVICES CONFIGURATION ---
+services:
+  # --- 1.1 APP SERVICE ---
+  writer-copilot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cwi-app
+    ports:
+      - "3081:8080"
+    environment:
+      - OLLAMA_HOST=http://100.95.235.61:11434
+      - AI_MODEL=gemma4:e2b
+      - VITE_ADMIN_USER=ADMIN
+      - VITE_ADMIN_PASS=E3r5c7
+    restart: unless-stopped
+    networks:
+      - ai-bridge
+
+networks:
+  ai-bridge:
+    external: true   # owned by infrastructure/docker-compose.ai.yml

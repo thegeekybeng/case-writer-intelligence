@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent session data (may contain case note fragments)
+.omc/sessions/
+.omc/state/
+
+# PDF — methodology doc, excluded to keep repo lightweight
+*.pdf
+
+# Backups
+*.bak-*
+.backup-*/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
