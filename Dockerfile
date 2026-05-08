@@ -17,6 +17,8 @@ RUN npm run build
 
 # --- 2. SERVE STAGE ---
 FROM nginx:alpine
+# Install curl for healthcheck (wget not reliably available as non-root in nginx:alpine)
+RUN apk add --no-cache curl
 # Set up non-root user and permissions
 RUN touch /var/run/nginx.pid && \
     chown -R nginx:nginx /var/run/nginx.pid /var/cache/nginx /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html

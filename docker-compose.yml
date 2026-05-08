@@ -18,7 +18,7 @@ services:
       # VITE_ADMIN_USER and VITE_ADMIN_PASS are build-time only (baked via ARG above)
       # They are not needed as runtime env vars — nginx has no process to read them
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health | grep healthy || exit 1"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
