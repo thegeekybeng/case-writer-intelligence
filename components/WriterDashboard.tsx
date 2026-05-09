@@ -69,16 +69,22 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
   const [isAutoScanEnabled, setIsAutoScanEnabled] = useState(false);
 
   const verifyAdmin = () => {
-    const validUser = import.meta.env.VITE_ADMIN_USER || "ayeo";
-    const validPass = import.meta.env.VITE_ADMIN_PASS || "mc10OCT2001ym";
+    // SECURITY: No fallback values — must be set via VITE_ADMIN_USER/VITE_ADMIN_PASS env vars.
+    // Note: VITE_ vars are visible in browser bundle. Move to server-side auth for production.
+    const validUser = import.meta.env.VITE_ADMIN_USER;
+    const validPass = import.meta.env.VITE_ADMIN_PASS;
+    if (!validUser || !validPass) {
+      alert('Admin credentials not configured. Set VITE_ADMIN_USER and VITE_ADMIN_PASS.');
+      return;
+    }
     if (adminUser === validUser && adminPass === validPass) {
       setIsAdminUnlocked(true);
       setShowAdminLogin(false);
-      setAdminUser("");
-      setAdminPass("");
+      setAdminUser('');
+      setAdminPass('');
       if (pendingAction) { pendingAction(); setPendingAction(null); }
     } else {
-      alert("Invalid Admin Credentials");
+      alert('Invalid Admin Credentials');
     }
   };
 
@@ -407,22 +413,31 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
                             );
                           }}
                         />
-                        <div className="p-3 border-t border-gray-100 flex justify-between items-center bg-gray-50">
-                          <p className="text-[10px] text-gray-400">
-                            {activeLetter.agencyLabel} • {activeLetter.content.length} chars
-                            {activeLetter.hasContext && " • with context"}
-                          </p>
-                          <button onClick={() => handleCopyToGather(selectedAgency)}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                              copiedAgency === selectedAgency
-                                ? "bg-green-100 text-green-700 border border-green-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white"
-                            }`}>
-                            {copiedAgency === selectedAgency
-                              ? <><ClipboardCheck size={12} /> Copied — fill ██ fields!</>
-                              : <><Copy size={12} /> Copy to Gather</>
-                            }
-                          </button>
+                        <div className="p-3 border-t border-gray-100 flex flex-col gap-2 bg-gray-50">
+                          {/* AI disclosure — required before copy/export */}
+                          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                            <BrainCircuit size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-amber-800 leading-relaxed">
+                              <strong>AI-Generated Content.</strong> This letter was assembled with AI assistance (Google Gemini). Review and approve before submitting to any agency or MP.
+                            </p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <p className="text-[10px] text-gray-400">
+                              {activeLetter.agencyLabel} • {activeLetter.content.length} chars
+                              {activeLetter.hasContext && " • with context"}
+                            </p>
+                            <button onClick={() => handleCopyToGather(selectedAgency)}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                copiedAgency === selectedAgency
+                                  ? "bg-green-100 text-green-700 border border-green-200"
+                                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                              }`}>
+                              {copiedAgency === selectedAgency
+                                ? <><ClipboardCheck size={12} /> Copied — fill ██ fields!</>
+                                : <><Copy size={12} /> Copy to Gather</>
+                              }
+                            </button>
+                          </div>
                         </div>
                       </>
                     );
