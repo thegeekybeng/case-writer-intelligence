@@ -1,22 +1,15 @@
-# --- 1. SERVICES CONFIGURATION ---
 services:
-  # --- 1.1 APP SERVICE ---
-  writer-copilot:
+  case-writer-intelligence:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        # Build-time injection — VITE_ vars must be ARGs to be baked into bundle
         - VITE_ADMIN_USER=${VITE_ADMIN_USER}
         - VITE_ADMIN_PASS=${VITE_ADMIN_PASS}
+        # OLLAMA_HOST removed — AI now goes via server-side proxy
     container_name: cwi-app
     ports:
       - "3081:8080"
-    environment:
-      - OLLAMA_HOST=http://100.95.235.61:11434/v1
-      - AI_MODEL=qwen3.5:4b-nvfp4
-      # VITE_ADMIN_USER and VITE_ADMIN_PASS are build-time only (baked via ARG above)
-      # They are not needed as runtime env vars — nginx has no process to read them
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/api/health"]
       interval: 30s
@@ -31,7 +24,39 @@ services:
     restart: unless-stopped
     networks:
       - ai-bridge
+    depends_on:
+      cwi-ai-proxy:
+        condition: service_healthy
+
+  # Server-side AI proxy — system prompt, PII masking, canary tokens,
+  # injection sanitization, and audit logging all live here.
+  # The browser never contacts Ollama directly.
+  cwi-ai-proxy:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: cwi-ai-proxy
+    environment:
+      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://100.95.235.61:11434/v1/chat/completions}
+      - AI_MODEL=${AI_MODEL:-qwen3.5:4b-nvfp4}
+      - PORT=3101
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3101/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.25"
+    restart: unless-stopped
+    networks:
+      - ai-bridge
 
 networks:
   ai-bridge:
-    external: true   # owned by infrastructure/docker-compose.ai.yml
+    external: true

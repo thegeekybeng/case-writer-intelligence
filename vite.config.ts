@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       'process.env.OLLAMA_HOST': JSON.stringify(process.env.OLLAMA_HOST || env.OLLAMA_HOST || '/api/v1'),
       'process.env.AI_MODEL': JSON.stringify(process.env.AI_MODEL || env.AI_MODEL || 'gemma4:e2b'),
       'process.env.OLLAMA_API_KEY': JSON.stringify(
-        process.env.OLLAMA_API_KEY || env.OLLAMA_API_KEY || env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || ''
+        process.env.OLLAMA_API_KEY || env.OLLAMA_API_KEY || ''
       ),
       'process.env.OLLAMA_API_BASE': JSON.stringify(
         process.env.OLLAMA_API_BASE || env.OLLAMA_API_BASE || '/api/v1/'

@@ -299,7 +299,7 @@ export const WriterProfileSetup: React.FC<WriterProfileSetupProps> = ({ onProfil
             {/* Privacy & AI processing notice */}
             <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[10px] text-amber-800 space-y-1 leading-relaxed">
               <p className="font-bold uppercase tracking-wide">Data & AI Notice</p>
-              <p>Case notes you enter are sent to <strong>Google Gemini API</strong> (external cloud service) for AI analysis and letter generation. Do not enter real NRIC numbers or highly sensitive personal data.</p>
+              <p>Case notes you enter are processed by a <strong>local AI model</strong> running on-premises. Data does not leave this platform. Do not enter real NRIC numbers or highly sensitive personal data.</p>
               <p>AI-generated letters must be reviewed and approved by you before submission to any agency or MP.</p>
             </div>
           </div>

@@ -266,7 +266,7 @@ export async function runCausalityEngine(
   onProgress?.({ stage: 'action', message: 'Scoring urgency and routing to agencies…' });
   const { urgency, agencyRoutes, documentQueue } = await runActionStage(nodes, gaps, timeline, domain);
 
-  // Normalise urgency enum value from Gemini string output
+  // Normalise urgency enum value from API string output
   const normalisedUrgency: UrgencyAssessment = {
     ...urgency,
     overall: urgency.overall as Urgency,

@@ -418,7 +418,7 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
                           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                             <BrainCircuit size={13} className="text-amber-600 shrink-0 mt-0.5" />
                             <p className="text-[10px] text-amber-800 leading-relaxed">
-                              <strong>AI-Generated Content.</strong> This letter was assembled with AI assistance (Google Gemini). Review and approve before submitting to any agency or MP.
+                              <strong>AI-Generated Content.</strong> This letter was assembled with AI assistance (local model). Review and approve before submitting to any agency or MP.
                             </p>
                           </div>
                           <div className="flex justify-between items-center">

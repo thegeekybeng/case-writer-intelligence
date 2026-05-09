@@ -1,5 +1,5 @@
 services:
-  writer-copilot:
+  case-writer-intelligence:
     build: .
     container_name: cwi-app
     ports:
