@@ -1,20 +1,22 @@
 # Case Writer Intelligence (CWI)
 
-Writing letters to government agencies on behalf of residents takes time — more than it should. A constituency volunteer needs to understand the case, identify the right agencies, structure the problem clearly, and draft something professional enough to get actioned. Done well, that whole process can take 30–45 minutes per case.
+Writing a letter to a government agency on behalf of a resident is not difficult — but it is slow. A constituency volunteer sitting across from someone at a Meet-the-People session needs to understand the full picture of the case, identify which agencies are relevant, determine what the actual ask is, and then produce something structured and professional enough to be taken seriously on the other end. Done well, that takes 30–45 minutes per case. When a session is handling 50–100 cases in a single evening, that pace is not sustainable.
 
-CWI cuts that down significantly. It reads the case notes, runs them through a causality engine to identify the root issue and downstream risks, and generates a draft letter for each relevant agency. The volunteer reviews, edits, and copies. That's it.
+The deeper problem is that the surface issue a resident presents is rarely the full story. Someone coming in about rental arrears may have an underlying job loss, a deteriorating health condition, or a family breakdown that is the real driver. If the letter to HDB focuses only on the arrears and omits that context, it gets processed as a routine case and the resident is no better off. Getting the full picture onto paper — in a structured way, for the right agencies — is the actual skill the volunteer is doing.
+
+CWI is built around that insight. It reads the raw case notes from the session, runs a three-stage causality analysis to surface the root issue and identify downstream risks, and then generates targeted draft letters for each relevant agency. The volunteer reviews, edits, and copies. The hard part — working out what is actually going on and what to say to whom — is handled. The human step — verification and approval — stays where it belongs.
 
 ---
 
 ## What it does
 
-- **Writer profile setup** — volunteer sets their name, MP, and constituency once; it pre-fills into every letter automatically
-- **Case input** — raw notes, as messy as they come from an MPS session
-- **Causality Engine** — identifies what's really going on beneath the surface issue and surfaces hidden risks
-- **Letter generation** — produces structured, professional letters for each agency identified (HDB, ICA, MSF, MOM, etc.)
-- **Admin auto-scan** — batch processes multiple cases when enabled by an admin
-
-All generated letters carry an AI disclosure — the volunteer is reminded to review before sending anything.
+- **Writer profile** — volunteer sets their name, MP, and constituency once; it pre-fills into every letter automatically
+- **Case input** — raw notes as entered during the MPS session; no formatting required
+- **Causality Engine** — 3-stage sequential LLM pipeline (Foundation → Reasoning → Action) that produces a structured `CausalGraph`: root cause identification, downstream risk surfacing, hidden information gap analysis, and per-agency routing with confidence scoring at each causal node
+- **Multi-agency letter generation** — draft letters generated deterministically from the `CausalGraph`; each letter is domain-weighted and agency-specific (HDB, ICA, MSF, MOM, CPF, MOH, and others); sequenced by the document queue; PDPA-compliant (resident PII held as `██` placeholders, completed by the writer before submission)
+- **Human-in-the-loop gate** — no letter is transmitted automatically; copy-paste to gather.gov.sg is the explicit human step, held until review is complete
+- **AI disclosure on all output** — every generated letter carries a visible watermark reminding the volunteer to review before submitting to any agency or MP
+- **Admin auto-scan** — batch processes multiple cases when enabled by an administrator
 
 ---
 
@@ -24,7 +26,7 @@ All generated letters carry an AI disclosure — the volunteer is reminded to re
 | --- | --- |
 | Frontend | React + TypeScript + Vite |
 | AI proxy | Node.js + Express (server-side, internal only) |
-| AI inference | Ollama — `qwen3.5:4b-nvfp4` (local, via server-side proxy) |
+| AI inference | Ollama — `qwen3.5:4b-nvfp4` (local network, via server-side proxy) |
 | Containerisation | Docker Compose |
 
 ---
@@ -42,7 +44,7 @@ This platform is built to OWASP LLM Top 10 compliance standards. The authoritati
 | LLM03 | Training Data Poisoning | ⚪ N/A | Read-only inference; no fine-tuning pipeline |
 | LLM04 | Model Denial of Service | ✅ Mitigated | Dual-layer rate limiting (nginx + proxy), request size caps, 45s letter timeout |
 | LLM05 | Supply Chain Vulnerabilities | ✅ Mitigated | GitHub Actions weekly `npm audit --audit-level=high` |
-| LLM06 | Sensitive Information Disclosure | ✅ Mitigated | Server-side PII masking on 5 SG-specific patterns before inference |
+| LLM06 | Sensitive Information Disclosure | ✅ Mitigated | Server-side PII masking on 6 SG-specific patterns before inference |
 | LLM07 | Insecure Plugin Design | ⚪ N/A | No plugin/tool-calling architecture |
 | LLM08 | Excessive Agency | ✅ Mitigated | All letter actions require explicit human review before sending |
 | LLM09 | Overreliance | ✅ Mitigated | Mandatory AI disclosure watermark on all generated letters |
@@ -98,7 +100,7 @@ Applied in `maskPII()` before every Ollama call. The model never sees raw reside
 
 | Pattern | Replacement |
 |---------|-------------|
-| Singapore NRIC/FIN | `[NRIC REDACTED]` |
+| Singapore NRIC/FIN (`[STFGM]\d{7}[A-Z]`) | `[NRIC REDACTED]` |
 | SG mobile — +65 format | `[PHONE REDACTED]` |
 | SG mobile — local 8/9 prefix | `[PHONE REDACTED]` |
 | Email address | `[EMAIL REDACTED]` |
@@ -109,11 +111,12 @@ Nginx telemetry omits client IP (PDPA compliance). AI audit logs record characte
 
 ---
 
-### Overreliance Mitigation (LLM08 / LLM09)
+### Human-in-the-Loop Gate (LLM08 / LLM09)
 
 - All generated letters carry a visible AI disclosure watermark
 - Volunteers are reminded to review content before sending anything to any agency
-- No letter is transmitted automatically — copy-paste is the explicit human step
+- No letter is transmitted automatically — copy-paste to gather.gov.sg is the explicit human step
+- The copy action is held until the volunteer has reviewed the generated content
 
 ---
 
@@ -133,6 +136,12 @@ Nginx telemetry omits client IP (PDPA compliance). AI audit logs record characte
 - `/api/ai/letter`: 5 req/min
 - Input length cap applied before reaching Ollama
 - `AbortSignal.timeout(30_000)` on chat/categorize; 45s on letter generation
+
+---
+
+### Authentication
+
+Admin auto-scan access is gated by `VITE_ADMIN_USER` and `VITE_ADMIN_PASS` (build-time environment variables, embedded in the bundle). Keep these credentials rotated. Migrating admin auth to a server-side session is the right long-term fix — tracked as a deferred item.
 
 ---
 
@@ -176,7 +185,7 @@ Enforced on every nginx response:
 - No external API keys
 - Nginx logs omit client IP
 - Writer profiles stored in `localStorage` — nothing persisted server-side
-- PII masked before inference — model never sees raw NRIC, phone, or address
+- PII masked before inference — the model never sees raw NRIC, phone, or address
 
 ---
 
@@ -205,7 +214,7 @@ docker logs cwi-ai-proxy | grep CANARY        # extraction attempts only
 
 Items marked `[BLOCK]` are merge blockers.
 
-**AI and LLM**
+#### AI and LLM
 
 - [ ] `[BLOCK]` All AI calls route through `cwi-ai-proxy` — no direct browser-to-Ollama calls
 - [ ] `[BLOCK]` System prompt defined only in `api/server.js`
@@ -218,26 +227,26 @@ Items marked `[BLOCK]` are merge blockers.
 - [ ] Rate limit defined for the new endpoint
 - [ ] `AbortSignal.timeout` defined on every inference call
 
-**Human-in-the-loop**
+#### Human-in-the-loop
 
 - [ ] AI disclosure visible on all generated output presented to users
 - [ ] No AI output transmitted automatically without explicit human action
 
-**Containers**
+#### Containers
 
 - [ ] `no-new-privileges: true`
 - [ ] Non-root user defined
 - [ ] Memory and CPU limits defined
 - [ ] Port exposure is minimum required
 
-**HTTP**
+#### HTTP
 
 - [ ] Full security header block in nginx config
 - [ ] `server_tokens off` present
 - [ ] `/api/ai/` location restricted to internal Docker IP range
 - [ ] CSP does not include `unsafe-inline` or `unsafe-eval`
 
-**CI/CD**
+#### CI/CD
 
 - [ ] `[BLOCK]` `npm audit --audit-level=high` passes cleanly for frontend and proxy
 
@@ -251,11 +260,29 @@ The surface issue a resident presents is rarely the full story. Someone coming i
 **Why a server-side AI proxy?**
 Case notes contain real resident concerns — housing, immigration, financial hardship. The original architecture proxied Ollama directly through nginx, making the system prompt visible in browser DevTools. The proxy moves system instructions, PII masking, injection sanitization, canary tokens, and output validation into a server container. The browser calls `/api/ai/` and never touches Ollama.
 
-**Why Qwen (qwen3.5:4b-nvfp4) over other models?**
-CWI makes heavy use of structured JSON output — case categorisation, agency identification, and risk mapping all return typed JSON objects. Qwen 3.5 is significantly more reliable at following `response_format: { type: "json_object" }` than comparably-sized general-purpose models.
+**Why Qwen (`qwen3.5:4b-nvfp4`) over other models?**
+CWI makes heavy use of structured JSON output — case categorisation, agency identification, and risk mapping all return typed JSON objects. Qwen 3.5 is significantly more reliable at following `response_format: { type: "json_object" }` than comparably-sized general-purpose models. Model selection here was empirical, not theoretical.
 
 **Why local inference instead of a hosted API?**
-Case notes contain real resident concerns. Sending that data to an external API creates a data processing relationship that needs proper legal basis and a DPA. Running locally eliminates that entirely. It also makes the tool usable in network-restricted environments.
+Case notes contain real resident concerns. Sending that data to an external API creates a data processing relationship that requires proper legal basis and a DPA. Running locally eliminates that entirely. It also makes the tool usable in network-restricted environments.
+
+**Why are VITE_ admin credentials a deferred item?**
+`VITE_` prefixed variables are embedded into the browser bundle at build time and visible via DevTools. For a demo context with no real resident data, this is an acceptable tradeoff. Migrating to a server-side session cookie with a POST-only login route is the clean fix — it is in the roadmap and not a current blocker.
+
+---
+
+## Architecture for scale
+
+CWI is scoped for single-branch deployment supporting one MP's constituency casework operation. A physical MPS session sees 50–100 cases per week. At 10× digital adoption that is roughly 1,000 case analyses per week — a workload the current architecture handles without modification.
+
+The Causality Engine is the only non-trivial bottleneck. It is a 3-stage sequential LLM pipeline taking up to 120 seconds synchronously. At scale it converts to an async job — the client posts a job, receives a job ID, and polls. That is the single architectural change that unlocks multi-branch deployment. Everything else is standard horizontal replication.
+
+| Trigger | Architectural change |
+|---|---|
+| > 3 concurrent causality analyses | Sync HTTP → async job queue (BullMQ + Redis); client polls `/api/ai/causality/:jobId` |
+| > 1 branch on one deployment | Writer profile and case history in SQLite with branch-scoped row isolation |
+| High-availability requirement | Multiple stateless proxy instances behind nginx upstream; already stateless, horizontally trivial |
+| National deployment | Ollama inference cluster or inference queue behind BullMQ; multi-tenant branch isolation |
 
 ---
 
@@ -264,17 +291,17 @@ Case notes contain real resident concerns. Sending that data to an external API 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Ollama running with `qwen3.5:4b-nvfp4` pulled
+- Ollama running with `qwen3.5:4b-nvfp4` pulled (or any OpenAI-compatible endpoint)
 - `ai-bridge` Docker network created by `infrastructure/docker-compose.ai.yml`
 
 ### Environment
 
-Copy `.env.example` to `.env`. No API keys required — inference is fully local.
+Copy `.env.example` to `.env`. No external API keys required — inference is fully local.
 
 ```env
 VITE_ADMIN_USER=your-admin-user
 VITE_ADMIN_PASS=your-admin-pass
-OLLAMA_ENDPOINT=http://100.95.235.61:11434/v1/chat/completions
+OLLAMA_ENDPOINT=http://<ollama-host>:11434/v1/chat/completions
 AI_MODEL=qwen3.5:4b-nvfp4
 ```
 
@@ -297,22 +324,23 @@ App available at `http://localhost:3081`. The `cwi-ai-proxy` container starts fi
 | `OLLAMA_ENDPOINT` | Ollama API URL (server-side proxy only — not exposed to browser) |
 | `AI_MODEL` | Model name (default: `qwen3.5:4b-nvfp4`) |
 
-> ⚠️ `VITE_` prefixed variables are embedded into the browser bundle at build time and are readable via DevTools. Keep admin credentials simple and rotate them. Migrating admin auth to a server-side session is the right long-term fix — tracked as a deferred item.
+> ⚠️ `VITE_` prefixed variables are embedded into the browser bundle at build time and are readable via DevTools. Keep admin credentials rotated. Migrating admin auth to a server-side session is the right long-term fix — tracked as a deferred item.
 
 ---
 
-## Notes on the Causality Engine
+## Important notes
 
-Documented in detail in `CAUSALITY_ENGINE.md`. The short version: it models a resident's problem as a chain rather than a single issue. That framing gives agency letters more context and tends to get faster, more substantive responses.
+This is a **research and demonstration tool**. It is not an official government service, not affiliated with any government agency, and must not be presented as one. The DEMO banner displayed in the application makes this explicit.
+
+Case notes entered into CWI are processed by a local AI model running on-premises. No data leaves the network. Do not use this tool with real resident NRIC numbers or other highly sensitive personal data in a demonstration context without appropriate safeguards in place.
 
 ---
 
-## Data handling
+## Roadmap
 
-- Writer profiles are stored in `localStorage` — nothing is persisted server-side
-- Case notes sent to local Ollama instance only via the server-side proxy — no external network calls
-- PII is masked server-side before inference — the model never sees raw NRIC, phone, or address
-- No case data leaves the local network
+CWI is the Case Writer Intelligence panel that was originally embedded inside MPS-Connect and has been extracted as a standalone tool. The current build covers the full letter generation pipeline: causality analysis, agency routing, letter drafting, and HITL governance.
+
+Planned next phases: demand-driven document collection (causality engine output drives a per-case document checklist, replacing static upload forms); integration with gather.gov.sg submission flow; SingPass OIDC for high-assurance cases; and continuous improvement via HITL-RAG feedback loop.
 
 ---
 
