@@ -11,7 +11,7 @@ CWI is built around that insight. It reads the raw case notes from the session, 
 ## What it does
 
 - **Writer profile** — volunteer sets their name, MP, and constituency once; it pre-fills into every letter automatically
-- **Case input** — raw notes as entered during the MPS session; no formatting required
+- **Case input** — raw notes as captured during a case intake session; no formatting required
 - **Causality Engine** — 3-stage sequential LLM pipeline (Foundation → Reasoning → Action) that produces a structured `CausalGraph`: root cause identification, downstream risk surfacing, hidden information gap analysis, and per-agency routing with confidence scoring at each causal node
 - **Multi-agency letter generation** — draft letters generated deterministically from the `CausalGraph`; each letter is domain-weighted and agency-specific (HDB, ICA, MSF, MOM, CPF, MOH, and others); sequenced by the document queue; PDPA-compliant (resident PII held as `██` placeholders, completed by the writer before submission)
 - **Human-in-the-loop gate** — no letter is transmitted automatically; copy-paste to gather.gov.sg is the explicit human step, held until review is complete
@@ -261,7 +261,7 @@ The surface issue a resident presents is rarely the full story. Someone coming i
 Case notes contain real resident concerns — housing, immigration, financial hardship. The original architecture proxied Ollama directly through nginx, making the system prompt visible in browser DevTools. The proxy moves system instructions, PII masking, injection sanitization, canary tokens, and output validation into a server container. The browser calls `/api/ai/` and never touches Ollama.
 
 **Why `gemma4:e2b`?**
-Same model as MPS-Connect. Gemma 4 is a stronger general reasoner and produces more contextually appropriate letter language than smaller quantised models. The `extractJSON()` fence-stripper in `server.js` handles cases where the model wraps structured output in markdown code blocks rather than returning raw JSON — a known Gemma behaviour that is now explicitly guarded against.
+Gemma 4 is a strong general reasoner that produces contextually appropriate, formally-toned letter language well-suited to constituency correspondence. The `extractJSON()` fence-stripper in `server.js` handles cases where the model wraps structured output in markdown code blocks rather than returning raw JSON — a known Gemma behaviour that is now explicitly guarded against.
 
 **Why local inference instead of a hosted API?**
 Case notes contain real resident concerns. Sending that data to an external API creates a data processing relationship that requires proper legal basis and a DPA. Running locally eliminates that entirely. It also makes the tool usable in network-restricted environments.
@@ -338,9 +338,9 @@ Case notes entered into CWI are processed by a local AI model running on-premise
 
 ## Roadmap
 
-CWI is the Case Writer Intelligence panel that was originally embedded inside MPS-Connect and has been extracted as a standalone tool. The current build covers the full letter generation pipeline: causality analysis, agency routing, letter drafting, and HITL governance.
+CWI is a standalone beta tool. The current build covers the core letter generation pipeline: case intake, causality analysis, agency routing, letter drafting, and HITL governance.
 
-Planned next phases: demand-driven document collection (causality engine output drives a per-case document checklist, replacing static upload forms); integration with gather.gov.sg submission flow; SingPass OIDC for high-assurance cases; and continuous improvement via HITL-RAG feedback loop.
+Planned next: demand-driven document collection where the causality engine output drives a per-case document checklist; server-side admin authentication to replace the current build-time credential approach; and a feedback loop to improve letter quality over time based on volunteer corrections.
 
 ---
 
