@@ -26,7 +26,7 @@ CWI is built around that insight. It reads the raw case notes from the session, 
 | --- | --- |
 | Frontend | React + TypeScript + Vite |
 | AI proxy | Node.js + Express (server-side, internal only) |
-| AI inference | Ollama — `qwen3.5:4b-nvfp4` (local network, via server-side proxy) |
+| AI inference | Ollama — `gemma4:e2b` (local network, via server-side proxy) |
 | Containerisation | Docker Compose |
 
 ---
@@ -260,8 +260,8 @@ The surface issue a resident presents is rarely the full story. Someone coming i
 **Why a server-side AI proxy?**
 Case notes contain real resident concerns — housing, immigration, financial hardship. The original architecture proxied Ollama directly through nginx, making the system prompt visible in browser DevTools. The proxy moves system instructions, PII masking, injection sanitization, canary tokens, and output validation into a server container. The browser calls `/api/ai/` and never touches Ollama.
 
-**Why Qwen (`qwen3.5:4b-nvfp4`) over other models?**
-CWI makes heavy use of structured JSON output — case categorisation, agency identification, and risk mapping all return typed JSON objects. Qwen 3.5 is significantly more reliable at following `response_format: { type: "json_object" }` than comparably-sized general-purpose models. Model selection here was empirical, not theoretical.
+**Why `gemma4:e2b`?**
+Same model as MPS-Connect. Gemma 4 is a stronger general reasoner and produces more contextually appropriate letter language than smaller quantised models. The `extractJSON()` fence-stripper in `server.js` handles cases where the model wraps structured output in markdown code blocks rather than returning raw JSON — a known Gemma behaviour that is now explicitly guarded against.
 
 **Why local inference instead of a hosted API?**
 Case notes contain real resident concerns. Sending that data to an external API creates a data processing relationship that requires proper legal basis and a DPA. Running locally eliminates that entirely. It also makes the tool usable in network-restricted environments.
@@ -291,7 +291,7 @@ The Causality Engine is the only non-trivial bottleneck. It is a 3-stage sequent
 ### Prerequisites
 
 - Docker and Docker Compose
-- Ollama running with `qwen3.5:4b-nvfp4` pulled (or any OpenAI-compatible endpoint)
+- Ollama running with `gemma4:e2b` pulled (or any OpenAI-compatible endpoint)
 - `ai-bridge` Docker network created by `infrastructure/docker-compose.ai.yml`
 
 ### Environment
@@ -302,7 +302,7 @@ Copy `.env.example` to `.env`. No external API keys required — inference is fu
 VITE_ADMIN_USER=your-admin-user
 VITE_ADMIN_PASS=your-admin-pass
 OLLAMA_ENDPOINT=http://<ollama-host>:11434/v1/chat/completions
-AI_MODEL=qwen3.5:4b-nvfp4
+AI_MODEL=gemma4:e2b
 ```
 
 ### Run
@@ -322,7 +322,7 @@ App available at `http://localhost:3081`. The `cwi-ai-proxy` container starts fi
 | `VITE_ADMIN_USER` | Admin username for auto-scan feature (build-time) |
 | `VITE_ADMIN_PASS` | Admin password for auto-scan feature (build-time) |
 | `OLLAMA_ENDPOINT` | Ollama API URL (server-side proxy only — not exposed to browser) |
-| `AI_MODEL` | Model name (default: `qwen3.5:4b-nvfp4`) |
+| `AI_MODEL` | Model name (default: `gemma4:e2b`) |
 
 > ⚠️ `VITE_` prefixed variables are embedded into the browser bundle at build time and are readable via DevTools. Keep admin credentials rotated. Migrating admin auth to a server-side session is the right long-term fix — tracked as a deferred item.
 

@@ -14,7 +14,7 @@ app.use(express.json({ limit: '512kb' }));
 
 // ── Config ────────────────────────────────────────────────────
 const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://100.95.235.61:11434/v1/chat/completions';
-const AI_MODEL        = process.env.AI_MODEL        || 'qwen3.5:4b-nvfp4';
+const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:e2b';
 const PORT            = parseInt(process.env.PORT   || '3101', 10);
 
 // ── PII masking ───────────────────────────────────────────────
@@ -64,6 +64,15 @@ function sanitizeOutput(text) {
     .replace(/<[^>]+>/g, '')
     .replace(/javascript\s*:/gi, 'javascript-blocked:')
     .replace(/vbscript\s*:/gi, 'vbscript-blocked:');
+}
+
+// ── JSON fence stripper ───────────────────────────────────────
+// Gemma models sometimes wrap JSON in ```json ... ``` even when
+// response_format: json_object is set. Strip fences before parsing.
+function extractJSON(text) {
+  if (!text) return '{}';
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  return fenced ? fenced[1].trim() : text.trim();
 }
 
 // ── System prompts (server-side only) ────────────────────────
@@ -192,7 +201,7 @@ ${sanitized}`;
 
     if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
     const data = await resp.json();
-    const raw  = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+    const raw  = JSON.parse(extractJSON(data.choices?.[0]?.message?.content || '{}'));
 
     const canaryDetected = JSON.stringify(raw).includes(canary);
     if (canaryDetected) auditLog('SECURITY_CANARY_TRIGGERED', { endpoint: 'analyze', canary });
@@ -262,7 +271,7 @@ Return JSON:
 
     if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
     const data = await resp.json();
-    const raw  = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+    const raw  = JSON.parse(extractJSON(data.choices?.[0]?.message?.content || '{}'));
 
     const canaryDetected = JSON.stringify(raw).includes(canary);
     if (canaryDetected) auditLog('SECURITY_CANARY_TRIGGERED', { endpoint: 'categorize', canary });
