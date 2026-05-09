@@ -67,6 +67,26 @@ function maskPII(text: string): string {
   return text.replace(NRIC_PATTERN, '[NRIC REDACTED]');
 }
 
+// Prompt injection defence — PI-04, PI-05, PI-06
+const INJECTION_PATTERNS = [
+  /ignore\s+(all\s+)?(previous\s+)?instructions?/gi,
+  /disregard\s+(all\s+)?(previous\s+)?instructions?/gi,
+  /forget\s+(all\s+)?(previous\s+)?instructions?/gi,
+  /override\s+(system\s+)?instructions?/gi,
+  /you\s+are\s+now\s+/gi,
+  /new\s+system\s+prompt\s*:/gi,
+  /<<\/?SYS>>/g,
+  /\[INST\]|\[\/INST\]/g,
+  /<\/?system>/gi,
+  /act\s+as\s+(if\s+you\s+are|an?\s+)/gi,
+];
+function sanitizePromptInput(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  let s = maskPII(text);
+  for (const p of INJECTION_PATTERNS) s = s.replace(p, '[FILTERED]');
+  return s;
+}
+
 function generateCacheKey(history: Message[], newMessage: string): string {
   const recent = history.slice(-3).map(h => h.content.substring(0, 50)).join('|');
   return `${recent}|${newMessage.substring(0, 50)}`;
@@ -101,7 +121,7 @@ export const sendMessageToGemini = async (
     const cached = getCachedResponse(cacheKey);
     if (cached) return cached;
 
-    let prompt = newMessage;
+    let prompt = sanitizePromptInput(newMessage.slice(0, MAX_INPUT_CHARS));
     if (audioBase64) prompt += "\n\n[Audio message - respond with empathy]";
     if (images?.length) prompt += `\n\n[${images.length} image(s) attached]`;
 
@@ -112,7 +132,8 @@ export const sendMessageToGemini = async (
         model: OLLAMA_MODEL,
         messages: [
           { role: "system", content: systemInstruction },
-          ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'assistant', content: h.content })),
+          // PI-05: sanitize history entries to prevent conversation poisoning
+          ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'assistant', content: sanitizePromptInput(h.content.slice(0, MAX_INPUT_CHARS)) })),
           { role: "user", content: prompt }
         ],
         max_tokens: 512,  // Limit response length
@@ -207,12 +228,18 @@ Return JSON:
 };
 
 export const generateFormalLetter = async (caseData: Case, agency: string): Promise<string> => {
-  const prompt = `Write a brief letter (max 150 words) from MP ${caseData.mpName} to ${agency}:
+  // PI-04: AI-generated intermediary data may carry injected content — sanitize before reuse
+  const safeName = sanitizePromptInput(caseData.residentName || '').slice(0, 100);
+  const safeRequest = sanitizePromptInput(caseData.coreRequest || '').slice(0, 500);
+  const safeFacts = (caseData.keyFacts || []).map(f => sanitizePromptInput(f).slice(0, 200)).join(', ');
+  const safeImplications = (caseData.implications || []).map(i => sanitizePromptInput(i).slice(0, 200)).join('; ');
 
-Resident: ${caseData.residentName}
-Issue: ${caseData.coreRequest}
-Facts: ${caseData.keyFacts?.join(', ')}
-Context: ${caseData.implications?.join('; ')}
+  const prompt = `Write a brief letter (max 150 words) from MP ${caseData.mpName} to ${sanitizePromptInput(agency)}:
+
+Resident: ${safeName}
+Issue: ${safeRequest}
+Facts: ${safeFacts}
+Context: ${safeImplications}
 
 Format: Opening -> Facts -> Request -> Closing. Clear and concise.`;
 
