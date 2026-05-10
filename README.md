@@ -39,7 +39,7 @@ This platform is built to OWASP LLM Top 10 compliance standards. The authoritati
 
 | # | Risk | Status | Control |
 |---|------|--------|---------|
-| LLM01 | Prompt Injection | ✅ Mitigated | Server-side proxy, 7-layer input sanitization, canary tokens |
+| LLM01 | Prompt Injection | ✅ Mitigated | Server-side proxy, 9-layer input sanitization (incl. encoded payload detection), scope-restricted single-purpose identity, canary tokens, output anomaly check |
 | LLM02 | Insecure Output Handling | ✅ Mitigated | HTML/script stripping, output schema enforcement, enum whitelist validation |
 | LLM03 | Training Data Poisoning | ⚪ N/A | Read-only inference; no fine-tuning pipeline |
 | LLM04 | Model Denial of Service | ✅ Mitigated | Dual-layer rate limiting (nginx + proxy), request size caps, 45s letter timeout |
@@ -69,6 +69,8 @@ The previous architecture proxied Ollama directly through nginx (`/api/v1/` and 
 | PI-05 | Code delimiter spoofing — prompt boundary markers |
 | PI-06 | History poisoning — max 20 turns; all turns individually sanitized |
 | PI-07 | Structural prompt terminators and role injection patterns |
+| PI-08 | Encoded payload detection — morse code (5+ tokens), base64 (6+ groups), hex (8+ byte pairs) rejected at proxy before inference |
+| PI-09 | Scope-restricted identity — model defined as single-purpose tool; explicit authorised/unauthorised task list; out-of-scope requests refused regardless of encoding or framing (RLHF helpfulness override mitigation) |
 
 **Canary token detection:** A per-request UUID is embedded in the system prompt. If the model echoes the canary in its response (extraction attempt), the proxy redacts it and emits `SECURITY_CANARY_TRIGGERED` in the audit log.
 
@@ -82,6 +84,8 @@ The previous architecture proxied Ollama directly through nginx (`/api/v1/` and 
 - All HTML tags stripped
 - `javascript:` → `javascript-blocked:`
 - `vbscript:` → `vbscript-blocked:`
+
+**Output anomaly check on `/api/ai/letter`:** After sanitization, generated letter content is scanned for structural anomalies (SQL patterns, code blocks, jailbreak phrases). Any match returns HTTP 422 and logs `OUTPUT_ANOMALY_LETTER` — the letter is never returned to the browser.
 
 **Schema enforcement on categorization and agency responses:**
 
