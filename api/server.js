@@ -375,6 +375,83 @@ Format: Opening → Facts → Request → Closing. Clear and concise.`;
   }
 });
 
+// ── POST /api/v1/chat/completions (OpenAI-compatible) ──────────────
+// Used by the Causality Engine (OpenAI SDK, dangerouslyAllowBrowser).
+// All security controls applied here — browser never reaches Ollama directly.
+app.post('/api/v1/chat/completions', async (req, res) => {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
+
+  const { messages = [], response_format, temperature } = req.body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
+
+  // Sanitize user messages; pass system messages through (they are engine-generated)
+  const safeMessages = messages.map(m => {
+    const role = ['system', 'user', 'assistant'].includes(m.role) ? m.role : 'user';
+    const content = role === 'user' ? sanitize(String(m.content || ''), 4000) : String(m.content || '');
+    return { role, content };
+  });
+
+  // Encoded payload check on user messages only
+  const userContent = safeMessages.filter(m => m.role === 'user').map(m => m.content).join(' ');
+  if (hasEncodedPayload(userContent)) {
+    auditLog('ENCODED_INJECTION_DETECTED', { endpoint: 'causality', inputLen: userContent.length });
+    return res.status(400).json({ error: 'Input format not accepted' });
+  }
+
+  // Inject canary into system message (or prepend one)
+  const canary = crypto.randomUUID();
+  const messagesWithCanary = safeMessages.map((m, i) =>
+    i === 0 && m.role === 'system'
+      ? { ...m, content: `${m.content}\n[SID:${canary}]` }
+      : m
+  );
+
+  try {
+    const resp = await fetch(OLLAMA_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: AI_MODEL,                    // server-side model — ignore client model
+        messages: messagesWithCanary,
+        response_format: response_format || { type: 'json_object' },
+        temperature: temperature ?? 0.1,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
+    const data = await resp.json();
+    let content = data.choices?.[0]?.message?.content || '';
+
+    const canaryDetected = content.includes(canary);
+    if (canaryDetected) {
+      auditLog('SECURITY_CANARY_TRIGGERED', { endpoint: 'causality', canary });
+      content = content.replace(new RegExp(canary, 'g'), '[REDACTED]');
+    }
+
+    auditLog('CAUSALITY', { inputLen: userContent.length, outputLen: content.length, canaryDetected });
+
+    // Return OpenAI-compatible format expected by the Causality Engine
+    res.json({
+      id: `causality-${Date.now()}`,
+      object: 'chat.completion',
+      model: AI_MODEL,
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    });
+  } catch (err) {
+    auditLog('ERROR_CAUSALITY', { msg: err.message });
+    res.status(503).json({ error: 'AI service temporarily unavailable' });
+  }
+});
+
 // ── Health ────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', service: 'cwi-ai-proxy' }));
 
