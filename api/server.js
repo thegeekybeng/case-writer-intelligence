@@ -419,12 +419,15 @@ app.post('/api/v1/chat/completions', async (req, res) => {
         response_format: response_format || { type: 'json_object' },
         temperature: temperature ?? 0.1,
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
     const data = await resp.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    // Strip markdown fences — gemma4:e2b wraps JSON in ```json...``` even with
+    // response_format set. extractJSON() normalises this before returning to the
+    // OpenAI SDK, which passes it to JSON.parse() in causalityEngine.ts.
+    let content = extractJSON(data.choices?.[0]?.message?.content || '{}');
 
     const canaryDetected = content.includes(canary);
     if (canaryDetected) {
