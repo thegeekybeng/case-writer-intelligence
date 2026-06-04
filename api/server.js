@@ -14,7 +14,7 @@ app.use(express.json({ limit: '512kb' }));
 
 // ── Config ────────────────────────────────────────────────────
 const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://100.95.235.61:11434/v1/chat/completions';
-const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:e2b';
+const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:26b';
 const PORT            = parseInt(process.env.PORT   || '3101', 10);
 
 // ── PII masking ───────────────────────────────────────────────
