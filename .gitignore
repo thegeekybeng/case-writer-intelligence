@@ -35,3 +35,4 @@ dist-ssr
 
 # Binary assets — store in external storage
 *.pdf
+SECURITY_FRAMEWORK.md
