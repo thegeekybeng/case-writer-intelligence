@@ -37,7 +37,7 @@ const OLLAMA_API_BASE = rawApiBase.startsWith('/')
 
 const OLLAMA_MODEL = typeof process.env.AI_MODEL !== 'undefined'
   ? process.env.AI_MODEL
-  : 'gemma4:26b';
+  : 'gemma4:12b-mlx';
 
 let _client: OpenAI | null = null;
 let _lastApiBase: string | null = null;
