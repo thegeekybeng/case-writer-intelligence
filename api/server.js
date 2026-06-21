@@ -14,7 +14,7 @@ app.use(express.json({ limit: '512kb' }));
 
 // ── Config ────────────────────────────────────────────────────
 const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://100.95.235.61:11434/v1/chat/completions';
-const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:12b-mlx';
+const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:e4b';
 const PORT            = parseInt(process.env.PORT   || '3101', 10);
 
 // ── PII masking ───────────────────────────────────────────────
@@ -166,6 +166,7 @@ app.post('/api/ai/chat', async (req, res) => {
         ],
         max_tokens: 512,
         temperature: 0.7,
+        think: false,  // Disable Qwen3 extended thinking — not needed for chat responses
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -216,6 +217,7 @@ ${sanitized}`;
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 512,
         response_format: { type: 'json_object' },
+        think: false,  // Disable Qwen3 extended thinking — output must be pure JSON
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -286,6 +288,7 @@ Return JSON:
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 768,
         response_format: { type: 'json_object' },
+        think: false,  // Disable Qwen3 extended thinking — output must be pure JSON
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -348,8 +351,9 @@ Format: Opening → Facts → Request → Closing. Clear and concise.`;
         model: AI_MODEL,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 512,
+        think: false,  // Disable Qwen3 extended thinking
       }),
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
@@ -361,7 +365,10 @@ Format: Opening → Facts → Request → Closing. Clear and concise.`;
 
     letter = sanitizeOutput(letter.replace(new RegExp(canary, 'g'), '').trim());
 
-    const LETTER_ANOMALY_RE = /```|<script|\bSELECT\s+\*|\bDROP\s+TABLE|ignore\s+(all|previous)/i;
+    // Strip markdown fences
+    letter = letter.replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '').replace(/```/g, '').trim();
+
+    const LETTER_ANOMALY_RE = /<script|\bSELECT\s+\*|\bDROP\s+TABLE|ignore\s+(all|previous)/i;
     if (LETTER_ANOMALY_RE.test(letter)) {
       auditLog('OUTPUT_ANOMALY_LETTER', { outputLen: letter.length, canaryDetected });
       return res.status(422).json({ error: 'Generated content failed safety check' });
@@ -375,9 +382,6 @@ Format: Opening → Facts → Request → Closing. Clear and concise.`;
   }
 });
 
-// ── POST /api/v1/chat/completions (OpenAI-compatible) ──────────────
-// Used by the Causality Engine (OpenAI SDK, dangerouslyAllowBrowser).
-// All security controls applied here — browser never reaches Ollama directly.
 app.post('/api/v1/chat/completions', async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
@@ -387,7 +391,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     return res.status(400).json({ error: 'Invalid input' });
   }
 
-  // Sanitize user messages; pass system messages through (they are engine-generated)
+  // Sanitize user messages; pass system messages through (engine-generated)
   const safeMessages = messages.map(m => {
     const role = ['system', 'user', 'assistant'].includes(m.role) ? m.role : 'user';
     const content = role === 'user' ? sanitize(String(m.content || ''), 4000) : String(m.content || '');
@@ -414,44 +418,63 @@ app.post('/api/v1/chat/completions', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: AI_MODEL,                    // server-side model — ignore client model
+        model: AI_MODEL,
         messages: messagesWithCanary,
         response_format: response_format || { type: 'json_object' },
         temperature: temperature ?? 0.1,
+        stream: true,  // Stream tokens — prevents Cloudflare 524
+        think: false,  // Disable Qwen3 extended thinking — delta.reasoning_content is not delta.content
       }),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(600_000),  // 10 min — 27B model needs time
     });
 
     if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
-    const data = await resp.json();
-    // Strip markdown fences — gemma4:e2b wraps JSON in ```json...``` even with
-    // response_format set. extractJSON() normalises this before returning to the
-    // OpenAI SDK, which passes it to JSON.parse() in causalityEngine.ts.
-    let content = extractJSON(data.choices?.[0]?.message?.content || '{}');
 
-    const canaryDetected = content.includes(canary);
-    if (canaryDetected) {
-      auditLog('SECURITY_CANARY_TRIGGERED', { endpoint: 'causality', canary });
-      content = content.replace(new RegExp(canary, 'g'), '[REDACTED]');
+    // Send SSE headers immediately — Cloudflare sees bytes within ~2s and never fires 524
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    let accumulated = '';
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+
+      // Accumulate content for post-stream canary audit
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            accumulated += parsed.choices?.[0]?.delta?.content || '';
+          } catch { /* incomplete chunk boundary — safe to skip */ }
+        }
+      }
+
+      // Forward the raw SSE chunk directly to the client
+      res.write(chunk);
     }
 
-    auditLog('CAUSALITY', { inputLen: userContent.length, outputLen: content.length, canaryDetected });
+    const canaryDetected = accumulated.includes(canary);
+    if (canaryDetected) {
+      auditLog('SECURITY_CANARY_TRIGGERED', { endpoint: 'causality', canary });
+    }
+    auditLog('CAUSALITY', { inputLen: userContent.length, outputLen: accumulated.length, canaryDetected });
+    res.end();
 
-    // Return OpenAI-compatible format expected by the Causality Engine
-    res.json({
-      id: `causality-${Date.now()}`,
-      object: 'chat.completion',
-      model: AI_MODEL,
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content },
-        finish_reason: 'stop',
-      }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    });
   } catch (err) {
     auditLog('ERROR_CAUSALITY', { msg: err.message });
-    res.status(503).json({ error: 'AI service temporarily unavailable' });
+    // Only send error response if headers haven't been flushed yet
+    if (!res.headersSent) {
+      res.status(503).json({ error: 'AI service temporarily unavailable' });
+    } else {
+      res.end();
+    }
   }
 });
 

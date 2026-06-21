@@ -95,7 +95,12 @@ Yellow Ribbon, MOM, ICA, SPF, SAF/MINDEF, NTUC/e2i, WSG (Workforce Singapore), S
 - Secondary routes address intermediate nodes.
 - Long-term routes address hidden risks and prevention.
 - Respect Singapore agency sequencing — e.g. ComCare before FSC for financial hardship.
-- Never route to an agency unless a specific node clearly maps to their mandate.`,
+- Never route to an agency unless a specific node clearly maps to their mandate.
+- Urgency scoring:
+  * Critical: Immediate threat to child welfare, safety, eviction, or zero survival funds.
+  * High: Severe time-sensitive hardships requiring prompt intervention.
+  * Medium: Standard assistance needed but no immediate danger.
+  * Low: General inquiries and long-term planning.`,
 };
 
 // ─── Default Export ──────────────────────────────────────────────────────────

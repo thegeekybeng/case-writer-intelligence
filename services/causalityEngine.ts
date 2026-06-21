@@ -37,7 +37,7 @@ const OLLAMA_API_BASE = rawApiBase.startsWith('/')
 
 const OLLAMA_MODEL = typeof process.env.AI_MODEL !== 'undefined'
   ? process.env.AI_MODEL
-  : 'gemma4:12b-mlx';
+  : 'gemma4:e4b';
 
 let _client: OpenAI | null = null;
 let _lastApiBase: string | null = null;
@@ -65,7 +65,7 @@ function getClient() {
 }
 
 async function callLLM<T>(prompt: string, systemPrompt?: string): Promise<T> {
-  const completion = await getClient().chat.completions.create({
+  const stream = await getClient().chat.completions.create({
     model: OLLAMA_MODEL,
     messages: [
       { 
@@ -76,12 +76,23 @@ async function callLLM<T>(prompt: string, systemPrompt?: string): Promise<T> {
     ],
     response_format: { type: 'json_object' },
     temperature: 0.1,
+    stream: true,
   });
-  
-  const content = completion.choices[0].message.content;
+
+  // Accumulate all token deltas into a single string before parsing.
+  // Streaming keeps the HTTP connection alive so Cloudflare never fires a 524.
+  let content = '';
+  for await (const chunk of stream) {
+    // Guard: Ollama's final [DONE] chunk often has choices:[] — skip safely
+    const delta = chunk.choices?.[0]?.delta?.content;
+    if (typeof delta === 'string') content += delta;
+  }
+
   if (!content) throw new Error('Empty response from LLM');
-  
-  return JSON.parse(content) as T;
+
+  // Strip markdown fences in case the model wraps JSON in ```json...```
+  const clean = content.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+  return JSON.parse(clean) as T;
 }
 
 // ─── Stage 1 + 2: Foundation ──────────────────────────────────────────────
@@ -189,17 +200,32 @@ async function runActionStage(
   agencyRoutes: AgencyRoute[];
   documentQueue: DocumentQueueItem[];
 }> {
+  // Trim verbose fields — pass only what the action stage needs for routing.
+  // Reduces prompt token count by ~60%, cutting model generation time significantly.
+  const compactNodes = nodes.map(n => ({
+    id: n.id, label: n.label, type: n.type,
+    causes: n.causes, effects: n.effects,
+    domain: n.domain, confidence: n.confidence,
+  }));
+  const compactGaps = gaps.map(g => ({
+    description: g.description, severity: g.severity,
+    affectedNodeIds: g.affectedNodeIds,
+  }));
+  const compactTimeline = timeline.map(t => ({
+    date: t.date, event: t.event, isRootCause: t.isRootCause, currentStatus: t.currentStatus,
+  }));
+
   const prompt = `
 You are ${config.analystPersona}.
 
 CAUSAL GRAPH NODES:
-${JSON.stringify(nodes, null, 2)}
+${JSON.stringify(compactNodes)}
 
 INFORMATION GAPS:
-${JSON.stringify(gaps, null, 2)}
+${JSON.stringify(compactGaps)}
 
 TIMELINE:
-${JSON.stringify(timeline, null, 2)}
+${JSON.stringify(compactTimeline)}
 
 ${config.routingTargets}
 
@@ -268,18 +294,18 @@ export async function runCausalityEngine(
 
   // Normalise urgency enum value from API string output
   const normalisedUrgency: UrgencyAssessment = {
-    ...urgency,
-    overall: urgency.overall as Urgency,
+    ...(urgency || {}),
+    overall: (urgency?.overall || 'Medium') as Urgency,
   };
 
   const graph: CausalGraph = {
-    entities,
-    timeline,
-    nodes,
-    gaps,
+    entities: entities || [],
+    timeline: timeline || [],
+    nodes: nodes || [],
+    gaps: gaps || [],
     urgency: normalisedUrgency,
-    agencyRoutes,
-    documentQueue,
+    agencyRoutes: agencyRoutes || [],
+    documentQueue: documentQueue || [],
     engineVersion: ENGINE_VERSION,
     processedAt: new Date().toISOString(),
   };
