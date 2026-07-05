@@ -1,3 +1,4 @@
+# EXAMPLE — Copy to docker-compose.lowmem.yml for constrained environments
 services:
   case-writer-intelligence:
     build: .

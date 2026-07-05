@@ -42,30 +42,37 @@ const OLLAMA_MODEL = typeof process.env.AI_MODEL !== 'undefined'
 let _client: OpenAI | null = null;
 let _lastApiBase: string | null = null;
 
-function getClient() {
+function getClient(token?: string) {
   const currentApiBase = rawApiBase.startsWith('/')
     ? `${window.location.origin}${rawApiBase}`
     : rawApiBase;
 
-  // Reset singleton if the dynamically evaluated URL changes
+  // Reset singleton if the dynamically evaluated URL changes or token changes
   if (_client && _lastApiBase !== currentApiBase) {
     _client = null;
   }
   _lastApiBase = currentApiBase;
 
-  if (!_client) {
+  // For this fix we instantiate a new client if token is provided because
+  // the singleton might be cached without the token.
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+  if (!_client || token) {
     if (!OLLAMA_API_KEY) throw new Error('OLLAMA_API_KEY not configured');
-    _client = new OpenAI({
+    const client = new OpenAI({
       apiKey: OLLAMA_API_KEY,
       baseURL: currentApiBase,
       dangerouslyAllowBrowser: true, // Vite project, running in client
+      defaultHeaders: headers,
     });
+    if (!token) _client = client;
+    return client;
   }
   return _client;
 }
 
-async function callLLM<T>(prompt: string, systemPrompt?: string): Promise<T> {
-  const stream = await getClient().chat.completions.create({
+async function callLLM<T>(prompt: string, systemPrompt?: string, token?: string): Promise<T> {
+  const stream = await getClient(token).chat.completions.create({
     model: OLLAMA_MODEL,
     messages: [
       { 
@@ -100,7 +107,8 @@ async function callLLM<T>(prompt: string, systemPrompt?: string): Promise<T> {
 
 async function runFoundationStage(
   notes: string,
-  config: CausalityDomainConfig
+  config: CausalityDomainConfig,
+  token?: string
 ): Promise<{
   entities: CausalEntity[];
   timeline: TimelineEvent[];
@@ -132,7 +140,8 @@ ${config.foundationRules}
 
   return callLLM<{ entities: CausalEntity[]; timeline: TimelineEvent[] }>(
     prompt,
-    `You are ${config.analystPersona}. Your goal is to extract foundational entities and reconstruct the factual timeline.`
+    `You are ${config.analystPersona}. Your goal is to extract foundational entities and reconstruct the factual timeline.`,
+    token
   );
 }
 
@@ -143,7 +152,8 @@ async function runReasoningStage(
   notes: string,
   entities: CausalEntity[],
   timeline: TimelineEvent[],
-  config: CausalityDomainConfig
+  config: CausalityDomainConfig,
+  token?: string
 ): Promise<{ nodes: CausalNode[]; gaps: CausalGap[] }> {
   const domainEnum = config.domains.map(d => `"${d}"`).join(' | ');
 
@@ -183,7 +193,8 @@ ${config.reasoningRules}
 
   return callLLM<{ nodes: CausalNode[]; gaps: CausalGap[] }>(
     prompt,
-    `You are ${config.analystPersona}. Your goal is to build a high-fidelity causal graph and detect hidden information gaps.`
+    `You are ${config.analystPersona}. Your goal is to build a high-fidelity causal graph and detect hidden information gaps.`,
+    token
   );
 }
 
@@ -194,7 +205,8 @@ async function runActionStage(
   nodes: CausalNode[],
   gaps: CausalGap[],
   timeline: TimelineEvent[],
-  config: CausalityDomainConfig
+  config: CausalityDomainConfig,
+  token?: string
 ): Promise<{
   urgency: UrgencyAssessment;
   agencyRoutes: AgencyRoute[];
@@ -259,7 +271,8 @@ ${config.actionRules}
     documentQueue: DocumentQueueItem[];
   }>(
     prompt,
-    `You are ${config.analystPersona}. Your goal is to assess urgency and provide concrete action steps for triage.`
+    `You are ${config.analystPersona}. Your goal is to assess urgency and provide concrete action steps for triage.`,
+    token
   );
 }
 
@@ -277,20 +290,22 @@ export type CausalityEngineProgress =
  * @param notes - Raw unstructured text to analyse
  * @param onProgress - Optional progress callback for UI updates
  * @param domain - Domain config. Defaults to MPS_SINGAPORE.
+ * @param token - Optional API bearer token
  */
 export async function runCausalityEngine(
   notes: string,
   onProgress?: (update: CausalityEngineProgress) => void,
-  domain: CausalityDomainConfig = DEFAULT_DOMAIN
+  domain: CausalityDomainConfig = DEFAULT_DOMAIN,
+  token?: string
 ): Promise<CausalGraph> {
   onProgress?.({ stage: 'foundation', message: 'Extracting entities and building timeline…' });
-  const { entities, timeline } = await runFoundationStage(notes, domain);
+  const { entities, timeline } = await runFoundationStage(notes, domain, token);
 
   onProgress?.({ stage: 'reasoning', message: 'Constructing causal graph and detecting gaps…' });
-  const { nodes, gaps } = await runReasoningStage(notes, entities, timeline, domain);
+  const { nodes, gaps } = await runReasoningStage(notes, entities, timeline, domain, token);
 
   onProgress?.({ stage: 'action', message: 'Scoring urgency and routing to agencies…' });
-  const { urgency, agencyRoutes, documentQueue } = await runActionStage(nodes, gaps, timeline, domain);
+  const { urgency, agencyRoutes, documentQueue } = await runActionStage(nodes, gaps, timeline, domain, token);
 
   // Normalise urgency enum value from API string output
   const normalisedUrgency: UrgencyAssessment = {

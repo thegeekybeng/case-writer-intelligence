@@ -41,11 +41,14 @@ export const sendMessage = async (
 };
 
 // ── Case notes analysis ───────────────────────────────────────
-export const streamCaseAnalysis = async (notes: string): Promise<any> => {
+export const streamCaseAnalysis = async (notes: string, token?: string): Promise<any> => {
   try {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const response = await fetch(`${AI_BASE}/analyze`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ notes }),
     });
 
@@ -105,12 +108,16 @@ export const generateFormalLetter = async (caseData: Case, agency: string): Prom
 // ── Empathy context for agency letters ───────────────────────
 export const generateEmpathyContext = async (
   riskLabels: string[],
-  agency: string
+  agency: string,
+  token?: string
 ): Promise<string | null> => {
   try {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const response = await fetch(`${AI_BASE}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         message: `Write a brief empathy note (2–3 sentences) for a letter to ${agency} addressing these risk factors: ${riskLabels.join(', ')}. Focus on the human impact without overstating.`,
         history: [],

@@ -24,7 +24,10 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: true, // Expose to network
-      allowedHosts: ['cwi.thegeekybeng.com'], // CRITICAL: Allows access via Cloudflare tunnel domain
+      allowedHosts: ['your-domain.example.com'], // TODO: Set your domain if using a reverse proxy / tunnel
     },
+    build: {
+      target: 'esnext'
+    }
   };
 });

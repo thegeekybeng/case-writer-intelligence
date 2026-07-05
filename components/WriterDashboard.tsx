@@ -65,53 +65,78 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [adminToken, setAdminToken] = useState("");
+  const [pendingAction, setPendingAction] = useState<((token: string) => void) | null>(null);
   const [isAutoScanEnabled, setIsAutoScanEnabled] = useState(false);
 
-  const verifyAdmin = () => {
-    // SECURITY: No fallback values — must be set via VITE_ADMIN_USER/VITE_ADMIN_PASS env vars.
-    // Note: VITE_ vars are visible in browser bundle. Move to server-side auth for production.
-    const validUser = import.meta.env.VITE_ADMIN_USER;
-    const validPass = import.meta.env.VITE_ADMIN_PASS;
-    if (!validUser || !validPass) {
-      alert('Admin credentials not configured. Set VITE_ADMIN_USER and VITE_ADMIN_PASS.');
+  // Restore session token from localStorage on mount.
+  // The token is valid for 8h server-side; if it's expired the first AI call
+  // will return a 401, which clears the stored token and re-prompts login.
+  useEffect(() => {
+    const stored = localStorage.getItem("cwi_admin_token");
+    if (!stored) return;
+    setAdminToken(stored);
+    setIsAdminUnlocked(true);
+  }, []);
+
+  const verifyAdmin = async () => {
+    if (!adminUser || !adminPass) {
+      alert('Please enter Admin Credentials.');
       return;
     }
-    if (adminUser === validUser && adminPass === validPass) {
-      setIsAdminUnlocked(true);
-      setShowAdminLogin(false);
-      setAdminUser('');
-      setAdminPass('');
-      if (pendingAction) { pendingAction(); setPendingAction(null); }
-    } else {
-      alert('Invalid Admin Credentials');
+    try {
+      const res = await fetch('/api/ai/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: adminUser, password: adminPass })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminToken(data.token);
+        setIsAdminUnlocked(true);
+        setShowAdminLogin(false);
+        setAdminUser('');
+        setAdminPass('');
+        // Persist token so session survives page refresh (expires server-side in 8h)
+        localStorage.setItem("cwi_admin_token", data.token);
+        if (pendingAction) { pendingAction(data.token); setPendingAction(null); }
+      } else {
+        alert('Invalid Admin Credentials');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Login failed. Please check your connection to the proxy.');
     }
   };
 
-  const guardAction = (action: () => void) => {
-    if (isAdminUnlocked) { action(); }
+  // Passing the fresh token as a parameter instead of closing over adminToken state
+  // prevents the stale-closure bug where pendingAction captures an empty token.
+  const guardAction = (action: (token: string) => void) => {
+    if (isAdminUnlocked) { action(adminToken); }
     else { setPendingAction(() => action); setShowAdminLogin(true); }
   };
 
   const analyzeNotes = async (notes: string) => {
-    setIsAnalyzing(true);
-    try {
-      const result = await streamCaseAnalysis(notes);
-      setExtractedInfo({
-        name: result.extractedFields?.name || "",
-        nric: result.extractedFields?.nric || "",
-        issue: result.extractedFields?.issue || "",
-        agencies: result.extractedFields?.agencies || [],
-      });
-      setSuggestions([
-        ...(result.missingInfo || []),
-        ...(result.suggestedAgencies || []).map((a: string) => `Consider referring to ${a}`),
-      ]);
-    } catch (error) {
-      console.error("Scan failed", error);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    guardAction(async (token: string) => {
+      setIsAnalyzing(true);
+      try {
+        const result = await streamCaseAnalysis(notes, token);
+        setExtractedInfo({
+          name: result.extractedFields?.name || "",
+          nric: result.extractedFields?.nric || "",
+          issue: result.extractedFields?.issue || "",
+          agencies: result.extractedFields?.agencies || [],
+        });
+        setSuggestions([
+          ...(result.missingInfo || []),
+          ...(result.suggestedAgencies || []).map((a: string) => `Consider referring to ${a}`),
+        ]);
+      } catch (error) {
+        console.error("Scan failed", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    });
   };
 
   useEffect(() => {
@@ -134,63 +159,65 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
 
   const handleRunEngine = async () => {
     if (!liveNotes.trim()) return;
-    setIsEngineRunning(true);
-    setCausalGraph(null);
-    setEngineStage("");
-    setEngineStagesDone([]);
-    setGeneratedLetters([]);
-    setSelectedAgency("");
-
-    try {
-      await runCausalityEngine(liveNotes, (update: CausalityEngineProgress) => {
-        if (update.stage === "complete") {
-          setCausalGraph(update.graph);
-          // Auto-select first primary agency
-          const primary = update.graph.agencyRoutes.find(r => r.priority === "primary");
-          if (primary) setSelectedAgency(primary.agency);
-        } else {
-          setEngineStagesDone(prev => [...prev, update.stage]);
-          setEngineStage(update.message);
-        }
-      });
-    } catch (err: any) {
-      console.error("Engine failed", err);
-      alert(`Engine error: ${err.message}`);
-    } finally {
-      setIsEngineRunning(false);
+    guardAction(async (token: string) => {
+      setIsEngineRunning(true);
+      setCausalGraph(null);
       setEngineStage("");
-    }
+      setEngineStagesDone([]);
+      setGeneratedLetters([]);
+      setSelectedAgency("");
+
+      try {
+        await runCausalityEngine(liveNotes, (update: CausalityEngineProgress) => {
+          if (update.stage === "complete") {
+            setCausalGraph(update.graph);
+            const primary = update.graph.agencyRoutes.find(r => r.priority === "primary");
+            if (primary) setSelectedAgency(primary.agency);
+          } else {
+            setEngineStagesDone(prev => [...prev, update.stage]);
+            setEngineStage(update.message);
+          }
+        }, undefined, token);
+      } catch (err: any) {
+        console.error("Engine failed", err);
+        if (err.message?.includes('401') || err.message?.includes('expired') || err.message?.includes('token')) {
+          setIsAdminUnlocked(false);
+          setAdminToken("");
+          localStorage.removeItem("cwi_admin_token");
+        }
+        alert(`Engine error: ${err.message}`);
+      } finally {
+        setIsEngineRunning(false);
+        setEngineStage("");
+      }
+    });
   };
 
   const handleGenerateAllLetters = async () => {
     if (!causalGraph) return;
-    setIsGeneratingLetters(true);
-    try {
-      let contextMap: Record<string, string> | undefined;
-
-      // Generate empathy context for each agency if toggle is on
-      if (includeContext) {
-        const riskLabels = extractContextMaterial(causalGraph);
-        if (riskLabels.length > 0) {
-          contextMap = {};
-          for (const route of causalGraph.agencyRoutes) {
-            const ctx = await generateEmpathyContext(riskLabels, route.agency);
-            if (ctx) contextMap[route.agency] = ctx;
+    guardAction(async (token: string) => {
+      setIsGeneratingLetters(true);
+      try {
+        let contextMap: Record<string, string> | undefined;
+        if (includeContext) {
+          const riskLabels = extractContextMaterial(causalGraph);
+          if (riskLabels.length > 0) {
+            contextMap = {};
+            for (const route of causalGraph.agencyRoutes) {
+              const ctx = await generateEmpathyContext(riskLabels, route.agency);
+              if (ctx) contextMap[route.agency] = ctx;
+            }
           }
         }
+        const result = generateAllLetters(causalGraph, contextMap, writerProfile);
+        setGeneratedLetters(result.letters);
+        if (result.letters.length > 0) setSelectedAgency(result.letters[0].agency);
+      } catch (error) {
+        console.error("Letter generation failed", error);
+      } finally {
+        setIsGeneratingLetters(false);
       }
-
-      const result = generateAllLetters(causalGraph, contextMap, writerProfile);
-      setGeneratedLetters(result.letters);
-      // Auto-select first letter tab
-      if (result.letters.length > 0) {
-        setSelectedAgency(result.letters[0].agency);
-      }
-    } catch (error) {
-      console.error("Letter generation failed", error);
-    } finally {
-      setIsGeneratingLetters(false);
-    }
+    });
   };
 
   const handleCopyToGather = (agency: string) => {

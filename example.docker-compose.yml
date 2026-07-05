@@ -1,12 +1,9 @@
+# EXAMPLE — Copy to docker-compose.yml and configure for your environment
 services:
   case-writer-intelligence:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - VITE_ADMIN_USER=${VITE_ADMIN_USER}
-        - VITE_ADMIN_PASS=${VITE_ADMIN_PASS}
-        # OLLAMA_HOST removed — AI now goes via server-side proxy
     container_name: cwi-app
     ports:
       - "3081:8080"
@@ -30,16 +27,23 @@ services:
 
   # Server-side AI proxy — system prompt, PII masking, canary tokens,
   # injection sanitization, and audit logging all live here.
-  # The browser never contacts Ollama directly.
+  # The browser never contacts the inference server directly.
   cwi-ai-proxy:
     build:
       context: ./api
       dockerfile: Dockerfile
     container_name: cwi-ai-proxy
     environment:
-      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://100.95.235.61:11434/v1/chat/completions}
-      - AI_MODEL=gemma4:e4b  # Locked — do not change without testing the causality engine end-to-end
+      # TODO: Set your Ollama / OpenAI-compatible endpoint
+      - OLLAMA_ENDPOINT=http://ollama-host:11434/v1/chat/completions
+      # TODO: Set your model — test the causality engine end-to-end after changing
+      - AI_MODEL=gemma4:e4b
       - PORT=3101
+      # TODO: Set admin credentials (used for auto-scan login)
+      - ADMIN_USER=change-me-admin-user
+      - ADMIN_PASS=change-me-strong-password
+      # TODO: Generate with: openssl rand -hex 32
+      - JWT_SECRET=generate-with-openssl-rand-hex-32
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3101/health"]
       interval: 30s

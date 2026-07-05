@@ -8,14 +8,24 @@
 
 const express = require('express');
 const crypto  = require('crypto');
+const jwt     = require('jsonwebtoken');
 const app     = express();
 
 app.use(express.json({ limit: '512kb' }));
 
 // ── Config ────────────────────────────────────────────────────
-const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://100.95.235.61:11434/v1/chat/completions';
+const OLLAMA_ENDPOINT = process.env.OLLAMA_ENDPOINT || 'http://ollama-host:11434/v1/chat/completions';
 const AI_MODEL        = process.env.AI_MODEL        || 'gemma4:e4b';
 const PORT            = parseInt(process.env.PORT   || '3101', 10);
+
+const ADMIN_USER      = process.env.ADMIN_USER;
+const ADMIN_PASS      = process.env.ADMIN_PASS;
+const JWT_SECRET      = process.env.JWT_SECRET;
+
+if (!ADMIN_USER || !ADMIN_PASS || !JWT_SECRET) {
+  console.error("FATAL: ADMIN_USER, ADMIN_PASS, and JWT_SECRET must be set in the environment.");
+  process.exit(1);
+}
 
 // ── PII masking ───────────────────────────────────────────────
 const PII_RULES = [
@@ -133,8 +143,38 @@ const ALLOWED_AGENCIES   = ['HDB', 'ICA', 'MSF', 'MOM', 'MOH', 'MOE', 'SPF', 'SL
 function safeStr(v, max) { return typeof v === 'string' ? v.slice(0, max).replace(/[<>]/g, '') : ''; }
 function safeArr(v, max)  { return Array.isArray(v) ? v.filter(i => typeof i === 'string').map(i => i.slice(0, max).replace(/[<>]/g, '')) : []; }
 
+// ── POST /api/ai/login ──────────────────────────────────────────
+app.post('/api/ai/login', (req, res) => {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
+
+  const { username, password } = req.body;
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    const token = jwt.sign({ user: username }, JWT_SECRET, { expiresIn: '8h' });
+    auditLog('ADMIN_LOGIN_SUCCESS', { ip });
+    return res.json({ token });
+  }
+  auditLog('ADMIN_LOGIN_FAILED', { ip, username });
+  res.status(401).json({ error: 'Invalid credentials' });
+});
+
+// Middleware to protect routes that require Admin access
+function requireAdmin(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
 // ── POST /api/ai/chat ─────────────────────────────────────────
-app.post('/api/ai/chat', async (req, res) => {
+app.post('/api/ai/chat', requireAdmin, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 30, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
@@ -191,7 +231,7 @@ app.post('/api/ai/chat', async (req, res) => {
 });
 
 // ── POST /api/ai/analyze ──────────────────────────────────────
-app.post('/api/ai/analyze', async (req, res) => {
+app.post('/api/ai/analyze', requireAdmin, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
@@ -250,7 +290,7 @@ ${sanitized}`;
 });
 
 // ── POST /api/ai/categorize ───────────────────────────────────
-app.post('/api/ai/categorize', async (req, res) => {
+app.post('/api/ai/categorize', requireAdmin, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
@@ -321,7 +361,7 @@ Return JSON:
 });
 
 // ── POST /api/ai/letter ───────────────────────────────────────
-app.post('/api/ai/letter', async (req, res) => {
+app.post('/api/ai/letter', requireAdmin, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 5, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
@@ -382,7 +422,7 @@ Format: Opening → Facts → Request → Closing. Clear and concise.`;
   }
 });
 
-app.post('/api/v1/chat/completions', async (req, res) => {
+app.post('/api/v1/chat/completions', requireAdmin, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
 
