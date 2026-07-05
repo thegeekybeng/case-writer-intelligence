@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CWI — Architecture Overview</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e6;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+  .header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .header h1 span { color: #6366f1; }
+  .export-btn {
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .export-btn:hover { background: #4f46e5; }
+
+  #diagram {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Layers */
+  .layer {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    position: relative;
+  }
+  .layer-label {
+    position: absolute;
+    top: -0.65rem;
+    left: 1rem;
+    background: #0a0a0f;
+    padding: 0 0.5rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+
+  /* Business Layer */
+  .layer--business { border-color: rgba(99,102,241,0.3); }
+  .layer--business .layer-label { color: #818cf8; }
+  .layer--business { grid-template-columns: 1fr 1fr; }
+
+  /* Intelligence Layer */
+  .layer--intelligence { border-color: rgba(168,85,247,0.3); }
+  .layer--intelligence .layer-label { color: #c084fc; }
+  .layer--intelligence { grid-template-columns: 1fr 1fr 1fr; }
+
+  /* Integration Layer */
+  .layer--integration { border-color: rgba(14,165,233,0.3); }
+  .layer--integration .layer-label { color: #38bdf8; }
+  .layer--integration { grid-template-columns: 1fr; }
+
+  /* Delivery Layer */
+  .layer--delivery { border-color: rgba(34,197,94,0.3); }
+  .layer--delivery .layer-label { color: #4ade80; }
+  .layer--delivery { grid-template-columns: 1fr 1fr; }
+
+  /* Cross-cutting bars */
+  .cross-cut {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+  }
+
+  /* Nodes */
+  .node {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    text-align: center;
+  }
+  .node-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.3rem;
+  }
+  .node-tech {
+    font-size: 0.7rem;
+    color: #9ca3af;
+  }
+  .node--accent-indigo  { border-left: 3px solid #6366f1; }
+  .node--accent-purple  { border-left: 3px solid #a855f7; }
+  .node--accent-sky     { border-left: 3px solid #0ea5e9; }
+  .node--accent-green   { border-left: 3px solid #22c55e; }
+  .node--accent-amber   { border-left: 3px solid #f59e0b; }
+  .node--accent-rose    { border-left: 3px solid #f43f5e; }
+
+  /* Arrows */
+  .arrow {
+    text-align: center;
+    color: #4b5563;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+  .arrow-label {
+    font-size: 0.65rem;
+    color: #6b7280;
+    margin-top: 0.15rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>CWI</span> — Layered Architecture</h1>
+  <button class="export-btn" onclick="exportPNG()">↓ Download PNG</button>
+</div>
+
+<div id="diagram">
+
+  <!-- BUSINESS LAYER -->
+  <div class="layer layer--business">
+    <span class="layer-label">Business</span>
+    <div class="node node--accent-indigo">
+      <div class="node-title">Writer Dashboard</div>
+      <div class="node-tech">React + TypeScript</div>
+    </div>
+    <div class="node node--accent-indigo">
+      <div class="node-title">Case Intake UI</div>
+      <div class="node-tech">Profile, notes, agency routing</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <div class="arrow-label">User input → raw case notes</div></div>
+
+  <!-- INTELLIGENCE LAYER -->
+  <div class="layer layer--intelligence">
+    <span class="layer-label">Intelligence</span>
+    <div class="node node--accent-purple">
+      <div class="node-title">Stage 1 — Foundation</div>
+      <div class="node-tech">Entity extraction + timeline</div>
+    </div>
+    <div class="node node--accent-purple">
+      <div class="node-title">Stage 2 — Reasoning</div>
+      <div class="node-tech">Causal graph + gap detection</div>
+    </div>
+    <div class="node node--accent-purple">
+      <div class="node-title">Stage 3 — Action</div>
+      <div class="node-tech">Urgency + routing + document queue</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <div class="arrow-label">CausalGraph JSON → letter generation</div></div>
+
+  <!-- INTEGRATION LAYER -->
+  <div class="layer layer--integration">
+    <span class="layer-label">Integration</span>
+    <div class="node node--accent-sky">
+      <div class="node-title">AI Proxy (cwi-ai-proxy)</div>
+      <div class="node-tech">Express · PII masking · injection sanitisation · canary tokens · audit log · rate limiting</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <div class="arrow-label">Sanitised prompts → inference</div></div>
+
+  <!-- DELIVERY LAYER -->
+  <div class="layer layer--delivery">
+    <span class="layer-label">Delivery</span>
+    <div class="node node--accent-green">
+      <div class="node-title">Nginx</div>
+      <div class="node-tech">Rate limiting · security headers · SPA routing</div>
+    </div>
+    <div class="node node--accent-green">
+      <div class="node-title">Ollama Inference</div>
+      <div class="node-tech">gemma4 · local network · OpenAI-compat API</div>
+    </div>
+  </div>
+
+  <!-- CROSS-CUTTING BARS -->
+  <div class="cross-cut">
+    <div class="node node--accent-rose">
+      <div class="node-title">Security & Governance</div>
+      <div class="node-tech">OWASP LLM Top 10 · PDPA · 7-layer sanitisation · HITL gate · AI disclosure</div>
+    </div>
+    <div class="node node--accent-amber">
+      <div class="node-title">Observability</div>
+      <div class="node-tech">Structured audit logs · canary detection · telemetry (no client IP)</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function exportPNG() {
+  const el = document.getElementById('diagram');
+  html2canvas(el, { backgroundColor: '#0a0a0f', scale: 2 }).then(canvas => {
+    const a = document.createElement('a');
+    a.download = 'cwi-architecture-overview.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2026-06-22",
+    "target": "./",
+    "formula_version": "1.1",
+    "scores": {
+      "security": 5.0,
+      "tech_debt": 8.0,
+      "deployability": 9.0,
+      "privacy": 9.5,
+      "observability": 8.0,
+      "scalability": 9.0,
+      "weighted_overall": 7.7
+    },
+    "finding_counts": {
+      "critical": 1,
+      "high": 3,
+      "medium": 2,
+      "low": 0
+    }
+  }
+]

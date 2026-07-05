@@ -40,8 +40,8 @@ docker-compose.*.yml
 # Tool state (omc, agent sessions)
 .omc/
 
-# AI Architecture Repository — internal governance notes
-.ai-arch/
+# AI Architecture Repository — committed for public transparency
+# .ai-arch/
 
 # Codebase visualization
 .codebase-viz/
