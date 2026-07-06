@@ -345,7 +345,3 @@ Case notes entered into CWI are processed by a local AI model running on-premise
 CWI is a standalone beta tool. The current build covers the core letter generation pipeline: case intake, causality analysis, agency routing, letter drafting, and HITL governance.
 
 Planned next: demand-driven document collection where the causality engine output drives a per-case document checklist; server-side admin authentication to replace the current build-time credential approach; and a feedback loop to improve letter quality over time based on volunteer corrections.
-
----
-
-<!-- Maintained by [your-name] -->

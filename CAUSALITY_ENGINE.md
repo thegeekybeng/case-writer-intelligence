@@ -1,6 +1,6 @@
 # Causality Engine — Usage Guide
 
-A domain-configurable, 3-stage causal analysis pipeline powered by Gemini 2.5 Flash.
+A domain-configurable, 3-stage causal analysis pipeline powered by local LLM inference.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Raw Text Input
    CausalGraph (structured JSON output)
 ```
 
-Each stage makes one Gemini API call. Total: **3 API calls per analysis**.
+Each stage makes one LLM API call. Total: **3 API calls per analysis**.
 
 ## Quick Start
 
@@ -218,17 +218,17 @@ interface CausalGraph {
 
 ## Prerequisites
 
-- **Gemini API Key**: Set `GEMINI_API_KEY` environment variable
-- **Model**: Gemini 2.5 Flash (JSON mode, temperature 0.1)
-- **No additional dependencies**: Uses `@google/generative-ai` (already in CWI)
+- **AI Inference**: Ollama running locally (or any OpenAI-compatible endpoint)
+- **Model**: gemma4 (or any model pulled into Ollama; JSON mode, temperature 0.1)
+- **No additional dependencies**: Uses `openai` SDK (already in CWI) — compatible with Ollama's OpenAI API
 
 ## Tips for Writing Domain Configs
 
-1. **Be specific in `analystPersona`** — the more precise the role, the better Gemini performs. "A site reliability engineer trained in systematic root cause analysis" beats "an IT analyst."
+1. **Be specific in `analystPersona`** — the more precise the role, the better the model performs. "A site reliability engineer trained in systematic root cause analysis" beats "an IT analyst."
 
 2. **Keep `domains` to 5–8 items** — too many dilutes classification. Group related concepts.
 
-3. **`routingTargets` should include abbreviations** — Gemini maps better when it sees "NOC (Network Operations Centre)" than just "NOC."
+3. **`routingTargets` should include abbreviations** — the model maps better when it sees "NOC (Network Operations Centre)" than just "NOC."
 
 4. **`foundationRules` control hallucination** — always include "do not invent facts" and "include only what is stated or strongly implied."
 
