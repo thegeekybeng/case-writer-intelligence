@@ -8,15 +8,18 @@ on:
   schedule:
     - cron: '0 18 * * 0'   # Weekly Sunday 02:00 SGT (18:00 UTC Sunday)
 
+permissions:
+  contents: read
+
 jobs:
   npm-audit:
     name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node 24
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -26,20 +29,16 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        # Remaining 2 moderate CVEs: esbuild <=0.24.2 (GHSA-67mh-4wv8-2f99) via
-        # vite <=6.4.1. Fix requires npm audit fix --force → vite@8 (breaking
-        # migration). Build-time only — not bundled into the served static app.
-        # All high and critical CVEs are resolved.
         run: npm audit --audit-level=high
 
   api-audit:
     name: AI Proxy Dependency Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node 24
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: '24'
 
