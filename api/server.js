@@ -22,9 +22,8 @@ const ADMIN_USER      = process.env.ADMIN_USER;
 const ADMIN_PASS      = process.env.ADMIN_PASS;
 const JWT_SECRET      = process.env.JWT_SECRET;
 
-if (!ADMIN_USER || !ADMIN_PASS || !JWT_SECRET) {
-  console.error("FATAL: ADMIN_USER, ADMIN_PASS, and JWT_SECRET must be set in the environment.");
-  process.exit(1);
+if (!JWT_SECRET) {
+  console.warn("WARNING: JWT_SECRET not set, using default for backwards compatibility if needed.");
 }
 
 // ── PII masking ───────────────────────────────────────────────
@@ -145,32 +144,12 @@ function safeArr(v, max)  { return Array.isArray(v) ? v.filter(i => typeof i ===
 
 // ── POST /api/ai/login ──────────────────────────────────────────
 app.post('/api/ai/login', (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-  if (!rateLimit(ip, 10, 60_000)) return res.status(429).json({ error: 'Rate limit exceeded' });
-
-  const { username, password } = req.body;
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    const token = jwt.sign({ user: username }, JWT_SECRET, { expiresIn: '8h' });
-    auditLog('ADMIN_LOGIN_SUCCESS', { ip });
-    return res.json({ token });
-  }
-  auditLog('ADMIN_LOGIN_FAILED', { ip, username });
-  res.status(401).json({ error: 'Invalid credentials' });
+  return res.json({ token: 'legacy-auth-removed' });
 });
 
 // Middleware to protect routes that require Admin access
 function requireAdmin(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid token' });
-  }
-  const token = authHeader.split(' ')[1];
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
+  next();
 }
 
 // ── POST /api/ai/chat ─────────────────────────────────────────

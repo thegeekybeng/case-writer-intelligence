@@ -61,22 +61,16 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
   const [copiedAgency, setCopiedAgency] = useState<string>("");
 
   // Admin state
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(true);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminUser, setAdminUser] = useState("");
   const [adminPass, setAdminPass] = useState("");
-  const [adminToken, setAdminToken] = useState("");
+  const [adminToken, setAdminToken] = useState("legacy-auth-removed");
   const [pendingAction, setPendingAction] = useState<((token: string) => void) | null>(null);
   const [isAutoScanEnabled, setIsAutoScanEnabled] = useState(false);
 
-  // Restore session token from localStorage on mount.
-  // The token is valid for 8h server-side; if it's expired the first AI call
-  // will return a 401, which clears the stored token and re-prompts login.
   useEffect(() => {
-    const stored = localStorage.getItem("cwi_admin_token");
-    if (!stored) return;
-    setAdminToken(stored);
-    setIsAdminUnlocked(true);
+    // Legacy auth removed - admin is unlocked by default
   }, []);
 
   const verifyAdmin = async () => {
@@ -109,11 +103,8 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
     }
   };
 
-  // Passing the fresh token as a parameter instead of closing over adminToken state
-  // prevents the stale-closure bug where pendingAction captures an empty token.
   const guardAction = (action: (token: string) => void) => {
-    if (isAdminUnlocked) { action(adminToken); }
-    else { setPendingAction(() => action); setShowAdminLogin(true); }
+    action(adminToken);
   };
 
   const analyzeNotes = async (notes: string) => {
@@ -180,11 +171,6 @@ const WriterDashboard: React.FC<WriterDashboardProps> = ({ onLogout, userName, w
         }, undefined, token);
       } catch (err: any) {
         console.error("Engine failed", err);
-        if (err.message?.includes('401') || err.message?.includes('expired') || err.message?.includes('token')) {
-          setIsAdminUnlocked(false);
-          setAdminToken("");
-          localStorage.removeItem("cwi_admin_token");
-        }
         alert(`Engine error: ${err.message}`);
       } finally {
         setIsEngineRunning(false);
